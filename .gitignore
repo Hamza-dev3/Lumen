@@ -19,3 +19,7 @@ x86/
 *.suo
 *.VC.db
 *.VC.opendb
+
+
+# Keep vendored libraries
+!External Libraries/**/*.lib
