@@ -1,4 +1,4 @@
-# LUMEN
+# LUMEN ☄️
 
 A 3D ball-rolling game. You are a purple energy core rolling across three abandoned orbital platforms. Collect the blue orbs and reach the teleporter ring at the end of each stage.
 
@@ -26,3 +26,4 @@ Place the following files in an `assets/` folder next to the executable:
 - `sky.jpg` — skybox texture
 
 If any are missing the game still runs with a grey fallback.
+<img width="498" height="498" alt="PortalGIF" src="https://github.com/user-attachments/assets/4649e511-0de9-46a0-9514-222a5c7be405" />
