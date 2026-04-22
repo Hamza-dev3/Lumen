@@ -9,7 +9,6 @@ x86/
 *.ilk
 *.idb
 *.exp
-*.lib
 *.log
 *.tlog
 
@@ -20,6 +19,8 @@ x86/
 *.VC.db
 *.VC.opendb
 
-
-# Keep vendored libraries
-!project1/External Libraries/**/*.lib
+# Keep vendored libraries (override ignore rules above)
+!External Libraries/
+!External Libraries/**
+!project1/External Libraries/
+!project1/External Libraries/**
