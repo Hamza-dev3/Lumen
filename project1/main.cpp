@@ -1,16 +1,20 @@
 // ============================================================
 //  LUMEN
-//  A purple energy core rolling across three abandoned
-//  orbital platforms.  Collect the blue orbs, reach the
-//  teleporter ring at the end of each relay.
+//  A textured ball rolling across three abandoned orbital
+//  platforms.  Collect the blue orbs, reach the teleporter
+//  ring at the end of each relay.
 //
 //  Controls:  WASD / arrows = roll,  Space = jump,
 //             Mouse X = orbit camera,  Esc = quit
 //
 //  Assets (in assets/):
 //    platform.jpg  – hull plating (static platforms)
+//    ball.jpg      – ball texture
 //    moving.jpg    – energy conduit pattern (moving platforms)
 //    sky.jpg       – nebula skybox
+//
+//  NOTE: This version uses NO LIGHTING — all surfaces show
+//  their raw texture/colour, fully unlit.
 // ============================================================
 
 #include <iostream>
@@ -149,113 +153,61 @@ void buildStages()
 }
 
 // ============================================================
-//  SHADERS  (kept in the same "\n" style as the earlier labs)
+//  SHADERS  —  NO LIGHTING, PURE TEXTURING
 // ============================================================
 
-// 3D vertex shader — just transforms position and passes attributes through.
+// 3D vertex shader — transforms position and passes UV through.
 const char* vertSrc =
 "#version 330 core\n"
 "layout(location=0) in vec3 aPos;\n"
 "layout(location=1) in vec3 aCol;\n"
 "layout(location=2) in vec3 aNormal;\n"
 "layout(location=3) in vec2 aUV;\n"
-"out vec3 vFragPos;\n"
-"out vec3 vNormal;\n"
-"out vec3 vLocalPos;\n"
 "out vec2 vUV;\n"
 "uniform mat4 model, view, projection;\n"
 "void main(){\n"
-"    vec4 wp = model * vec4(aPos, 1.0);\n"
-"    vFragPos  = wp.xyz;\n"
-"    vNormal   = mat3(transpose(inverse(model))) * aNormal;\n"
-"    vLocalPos = aPos;\n"
-"    vUV       = aUV;\n"
-"    gl_Position = projection * view * wp;\n"
+"    vUV = aUV;\n"
+"    gl_Position = projection * view * model * vec4(aPos, 1.0);\n"
 "}\n";
 
-// 3D fragment shader — one big switch on objMode decides each surface:
-//   0 hull plating    1 energy ball    2 orb          3 ring segment
-//   4 energy conduit  5 skybox
+// 3D fragment shader — objMode picks a texture or flat colour, NO LIGHTING.
+//   0 hull plating (texture)  1 ball (texture)   2 orb (flat blue)
+//   3 ring (flat cyan)        4 conduit (texture) 5 skybox (texture)
 const char* fragSrc =
 "#version 330 core\n"
 "out vec4 FragColor;\n"
-"in vec3 vFragPos;\n"
-"in vec3 vNormal;\n"
-"in vec3 vLocalPos;\n"
 "in vec2 vUV;\n"
-"uniform vec3  lightPos;\n"
-"uniform vec3  viewPos;\n"
-"uniform float uTime;\n"
 "uniform int   objMode;\n"
 "uniform sampler2D tPlat;\n"  // platform.jpg   (unit 0)
+"uniform sampler2D tBall;\n"  // ball.jpg       (unit 1)
 "uniform sampler2D tMove;\n"  // moving.jpg     (unit 2)
 "uniform sampler2D tSky;\n"   // sky.jpg        (unit 3)
 "\n"
-"// Simple Phong with a gentle nebula-purple ambient so everything\n"
-"// sits in the scene instead of floating on a black void.\n"
-"vec3 phong(vec3 base){\n"
-"    vec3 n = normalize(vNormal);\n"
-"    vec3 l = normalize(lightPos - vFragPos);\n"
-"    vec3 v = normalize(viewPos  - vFragPos);\n"
-"    float d = max(dot(n,l), 0.0);\n"
-"    float s = pow(max(dot(v, reflect(-l,n)), 0.0), 48.0);\n"
-"    vec3 ambient = base * vec3(0.25, 0.20, 0.35);\n"  // purple tint
-"    return ambient + d*base + s*vec3(0.6);\n"
-"}\n"
-"\n"
 "void main(){\n"
-"    // --- skybox: unlit, uses tSky ---\n"
-"    if(objMode == 5){ FragColor = vec4(texture(tSky, vUV).rgb, 1.0); return; }\n"
-"\n"
-"    vec3 base;\n"
-"    bool emissive = false;\n"
-"\n"
 "    if(objMode == 0){\n"
-"        // Hull plating: cool-blue tinted concrete + emissive grid lines\n"
-"        // (lines appear wherever world X or Z crosses an integer)\n"
-"        vec3 tex = texture(tPlat, vUV * 0.5).rgb * vec3(0.55, 0.70, 0.95);\n"
-"        vec2 g   = abs(fract(vFragPos.xz) - 0.5);\n"
-"        float line = smoothstep(0.48, 0.5, max(g.x, g.y));\n"
-"        base = tex + vec3(0.05, 0.35, 0.55) * line;\n"
+"        // Hull plating — raw texture\n"
+"        FragColor = vec4(texture(tPlat, vUV).rgb, 1.0);\n"
 "    }\n"
 "    else if(objMode == 1){\n"
-"        // PURPLE ENERGY BALL — no texture, fully procedural.\n"
-"        // Swirling inner energy from layered sin waves on local position.\n"
-"        float a = sin(vLocalPos.y * 6.0 + uTime * 3.0);\n"
-"        float b = sin(vLocalPos.x * 5.0 - uTime * 2.5);\n"
-"        float c = sin(vLocalPos.z * 7.0 + uTime * 4.0);\n"
-"        float swirl = 0.5 + 0.5 * sin((a + b + c) * 1.3);\n"
-"        vec3 coreA = vec3(0.35, 0.05, 0.75);  // deep violet\n"
-"        vec3 coreB = vec3(0.75, 0.30, 1.00);  // bright magenta-purple\n"
-"        vec3 core  = mix(coreA, coreB, swirl);\n"
-"        // Fresnel rim — strong glow on silhouette edges\n"
-"        vec3  n     = normalize(vNormal);\n"
-"        vec3  v     = normalize(viewPos - vFragPos);\n"
-"        float fres  = pow(1.0 - max(dot(n, v), 0.0), 3.0);\n"
-"        vec3  rim   = vec3(1.0, 0.55, 1.0) * fres * 1.8;\n"
-"        FragColor = vec4(core * 1.2 + rim, 1.0); return;\n"
+"        // Ball — raw texture, no lighting\n"
+"        FragColor = vec4(texture(tBall, vUV).rgb, 1.0);\n"
 "    }\n"
 "    else if(objMode == 2){\n"
-"        // Orb — soft blue pulse, emissive\n"
-"        float rim   = 1.0 - clamp(length(vLocalPos) / 0.4, 0.0, 1.0);\n"
-"        float pulse = 0.85 + 0.15 * sin(uTime * 6.0);\n"
-"        base     = mix(vec3(0.3, 0.65, 1.0), vec3(1.0), rim * pulse);\n"
-"        emissive = true;\n"
+"        // Orb — flat blue\n"
+"        FragColor = vec4(0.4, 0.8, 1.0, 1.0);\n"
 "    }\n"
 "    else if(objMode == 3){\n"
-"        // Teleporter ring segment — cyan-white, emissive, pulsing\n"
-"        float p  = 0.7 + 0.3 * sin(uTime * 4.0);\n"
-"        base     = vec3(0.4, 0.95, 1.0) * p;\n"
-"        emissive = true;\n"
+"        // Teleporter ring — flat cyan-white\n"
+"        FragColor = vec4(0.5, 1.0, 1.0, 1.0);\n"
+"    }\n"
+"    else if(objMode == 4){\n"
+"        // Energy conduit — raw texture\n"
+"        FragColor = vec4(texture(tMove, vUV).rgb, 1.0);\n"
 "    }\n"
 "    else {\n"
-"        // Energy conduit: woven blue texture + strong cyan pulse\n"
-"        float p = 0.6 + 0.4 * sin(uTime * 3.0);\n"
-"        base    = texture(tMove, vUV * 0.5).rgb * vec3(0.4, 1.0, 1.2) * p;\n"
-"        emissive = true;\n"
+"        // Skybox — raw texture\n"
+"        FragColor = vec4(texture(tSky, vUV).rgb, 1.0);\n"
 "    }\n"
-"\n"
-"    FragColor = vec4(emissive ? base * 2.5 : phong(base), 1.0);\n"
 "}\n";
 
 // HUD shader — single-colour screen-space quads.  No textures.
@@ -334,7 +286,7 @@ unsigned int buildSphere(int& idxCount)
     return VAO;
 }
 
-// Unit cube with per-face UVs and normals, 36 verts.  Same layout as the sphere.
+// Unit cube with per-face UVs and normals, 36 verts.
 unsigned int buildBox()
 {
     float d[] = {
@@ -384,7 +336,7 @@ unsigned int buildHudQuad()
     return VAO;
 }
 
-// Triangle fan for a filled circle pip (16 segments, centred at (0,0), radius 1).
+// Triangle fan for a filled circle pip.
 unsigned int buildCircle(int& triCount)
 {
     const int SEG = 20;
@@ -395,7 +347,7 @@ unsigned int buildCircle(int& triCount)
         v.push_back(cosf(a));
         v.push_back(sinf(a));
     }
-    triCount = SEG + 2;  // center + SEG+1 rim points (TRIANGLE_FAN)
+    triCount = SEG + 2;
     unsigned int VAO, VBO;
     glGenVertexArrays(1, &VAO); glGenBuffers(1, &VBO);
     glBindVertexArray(VAO);
@@ -438,7 +390,6 @@ unsigned int loadTexture(const char* path)
 //  COLLISION + SPAWN
 // ============================================================
 
-// AABB-vs-sphere: resolve the ball on top of a platform, return true if it landed.
 bool checkPlatform(const glm::vec3& pos, const glm::vec3& half)
 {
     glm::vec3 cl = glm::clamp(ballPos, pos - half, pos + half);
@@ -535,15 +486,15 @@ void updateBall(GLFWwindow* win)
         ballVel.x *= FRIC; ballVel.z *= FRIC;
     }
     else {
-        wasOnGround = false;  // steering only works on ground
+        wasOnGround = false;
     }
 
-    // --- rolling animation, always follows current velocity direction ---
+    // --- rolling animation ---
     float hSpd = sqrtf(ballVel.x * ballVel.x + ballVel.z * ballVel.z);
     if (hSpd > 0.05f) {
         glm::vec3 vd = glm::normalize(glm::vec3(ballVel.x, 0.f, ballVel.z));
         ballRollAxis = glm::cross(vd, glm::vec3(0, 1, 0));
-        ballRoll += hSpd * deltaTime * (180.f / (glm::pi<float>() * BALL_R));
+        ballRoll -= hSpd * deltaTime * (180.f / (glm::pi<float>() * BALL_R));
     }
 
     // --- gravity + integrate ---
@@ -561,7 +512,7 @@ void updateBall(GLFWwindow* win)
     // --- fall-off ---
     if (ballPos.y < -6.0f) { state = DEAD; deadTimer = 0.f; }
 
-    // --- goal check (cylinder at goal position) ---
+    // --- goal check ---
     float dx = ballPos.x - sd.goal.x, dz = ballPos.z - sd.goal.z;
     if (sqrtf(dx * dx + dz * dz) < 2.0f && ballPos.y > sd.goal.y - 1.0f) {
         if (curStage < 2) { state = STAGE_CLEAR; clearTimer = 0.f; }
@@ -590,7 +541,6 @@ void drawBox(unsigned int prog, unsigned int VAO,
     glDrawArrays(GL_TRIANGLES, 0, 36);
 }
 
-// Solid-colour HUD rectangle in screen pixels.
 void drawHudRect(unsigned int prog, unsigned int VAO, const glm::mat4& ortho,
     float x, float y, float w, float h,
     float r, float g, float b, float a)
@@ -602,7 +552,6 @@ void drawHudRect(unsigned int prog, unsigned int VAO, const glm::mat4& ortho,
     glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
-// Solid-colour HUD circle centred at (cx, cy) with the given radius.
 void drawHudCircle(unsigned int prog, unsigned int VAO, int triCount,
     const glm::mat4& ortho,
     float cx, float cy, float radius,
@@ -658,11 +607,13 @@ int main()
     unsigned int circleVAO = buildCircle(circleCount);
 
     unsigned int tPlat = loadTexture("assets/platform.jpg");
+    unsigned int tBall = loadTexture("assets/ball.jpg");
     unsigned int tMove = loadTexture("assets/moving.jpg");
     unsigned int tSky = loadTexture("assets/sky.jpg");
 
     glUseProgram(mainProg);
     glUniform1i(glGetUniformLocation(mainProg, "tPlat"), 0);
+    glUniform1i(glGetUniformLocation(mainProg, "tBall"), 1);
     glUniform1i(glGetUniformLocation(mainProg, "tMove"), 2);
     glUniform1i(glGetUniformLocation(mainProg, "tSky"), 3);
 
@@ -702,14 +653,13 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // ================ SKYBOX ================
-        // Drawn first as a huge box centred on the camera, no depth write.
         glDepthMask(GL_FALSE);
         glDisable(GL_DEPTH_TEST);
         glUseProgram(mainProg);
         glActiveTexture(GL_TEXTURE3);
         glBindTexture(GL_TEXTURE_2D, tSky);
         glUniform1i(glGetUniformLocation(mainProg, "objMode"), 5);
-        glm::mat4 skyView = glm::mat4(glm::mat3(view));  // strip translation
+        glm::mat4 skyView = glm::mat4(glm::mat3(view));
         glm::mat4 skyModel = glm::scale(glm::mat4(1.f), glm::vec3(100.f));
         setMVP(mainProg, skyModel, skyView, proj);
         glBindVertexArray(boxVAO);
@@ -719,12 +669,6 @@ int main()
 
         // ================ SCENE ================
         Stage& sd = stages[curStage < 3 ? curStage : 2];
-
-        // Light follows the ball with a gentle bob (C5).
-        glm::vec3 lightPos = ballPos + glm::vec3(0.f, 4.f + sinf(now * 2.f) * 0.5f, 0.f);
-        glUniform3fv(glGetUniformLocation(mainProg, "lightPos"), 1, glm::value_ptr(lightPos));
-        glUniform3fv(glGetUniformLocation(mainProg, "viewPos"), 1, glm::value_ptr(camPos));
-        glUniform1f(glGetUniformLocation(mainProg, "uTime"), now);
 
         // --- platforms ---
         glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, tPlat);
@@ -750,12 +694,11 @@ int main()
             glDrawElements(GL_TRIANGLES, sphereCount, GL_UNSIGNED_INT, 0);
         }
 
-        // --- teleporter ring: 24 small glowing cubes in a circle ---
+        // --- teleporter ring: 24 small cubes in a circle ---
         {
             glUniform1i(glGetUniformLocation(mainProg, "objMode"), 3);
             const int  RING_SEGS = 24;
             const float RING_RAD = 1.6f;
-            float       pulse = 1.f + 0.15f * sinf(now * 3.f);
             glm::vec3   ringCentre = sd.goal + glm::vec3(0.f, 1.5f, 0.f);
             for (int i = 0; i < RING_SEGS; i++) {
                 float a = 2.f * glm::pi<float>() * i / RING_SEGS + now * 1.5f;
@@ -764,15 +707,16 @@ int main()
                     0.f);
                 glm::mat4 m = glm::translate(glm::mat4(1.f), segPos);
                 m = glm::rotate(m, a, { 0, 0, 1 });
-                m = glm::scale(m, glm::vec3(0.18f * pulse, 0.18f * pulse, 0.12f));
+                m = glm::scale(m, glm::vec3(0.18f, 0.18f, 0.12f));
                 setMVP(mainProg, m, view, proj);
                 glBindVertexArray(boxVAO);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
             }
         }
 
-        // --- ball ---
+        // --- ball: textured, no lighting ---
         if (state == PLAYING || state == STAGE_CLEAR) {
+            glActiveTexture(GL_TEXTURE1); glBindTexture(GL_TEXTURE_2D, tBall);
             glUniform1i(glGetUniformLocation(mainProg, "objMode"), 1);
             glm::mat4 m = glm::translate(glm::mat4(1.f), ballPos);
             if (glm::length(ballRollAxis) > 0.01f)
@@ -783,15 +727,14 @@ int main()
         }
 
         // ============================================================
-        //  HUD  (B4: pips + color tints, no text at all)
+        //  HUD
         // ============================================================
         glDisable(GL_DEPTH_TEST);
         glUseProgram(hudProg);
         float W = (float)SCR_W, H = (float)SCR_H;
 
-        // --- gameplay HUD: orb pips (top-left) + timer bar (top-right) ---
+        // --- gameplay HUD: orb pips + timer bar ---
         if (state == PLAYING || state == DEAD || state == STAGE_CLEAR) {
-            // Orb pips — one filled circle per orb in the current stage
             int stageOrbs = (int)sd.orbs.size();
             int stageGot = 0;
             for (auto& o : sd.orbs) if (o.got) stageGot++;
@@ -799,10 +742,8 @@ int main()
                 float cx = 30.f + i * 28.f;
                 float cy = H - 30.f;
                 bool got = (i < stageGot);
-                // outer dim ring
                 drawHudCircle(hudProg, circleVAO, circleCount, ortho,
                     cx, cy, 11.f, 0.2f, 0.3f, 0.6f, 0.9f);
-                // filled inner only if collected (bright cyan-white with pulse)
                 if (got) {
                     float p = 0.8f + 0.2f * sinf(now * 5.f + i);
                     drawHudCircle(hudProg, circleVAO, circleCount, ortho,
@@ -810,26 +751,24 @@ int main()
                 }
             }
 
-            // Stage progress pips (top-centre) — 3 larger circles
+            // Stage progress pips
             for (int i = 0; i < 3; i++) {
                 float cx = W / 2 - 30 + i * 30.f;
                 float cy = H - 30.f;
                 drawHudCircle(hudProg, circleVAO, circleCount, ortho,
                     cx, cy, 10.f, 0.15f, 0.15f, 0.25f, 0.9f);
                 if (i < curStage) {
-                    // completed stage — solid green
                     drawHudCircle(hudProg, circleVAO, circleCount, ortho,
                         cx, cy, 7.f, 0.2f, 0.9f, 0.4f, 1.f);
                 }
                 else if (i == curStage) {
-                    // active stage — pulsing purple
                     float p = 0.75f + 0.25f * sinf(now * 4.f);
                     drawHudCircle(hudProg, circleVAO, circleCount, ortho,
                         cx, cy, 7.f, 0.8f * p, 0.3f * p, 1.f * p, 1.f);
                 }
             }
 
-            // Timer bar — thin horizontal bar top-right, fills over 60 s
+            // Timer bar
             float tw = 160.f, th = 6.f;
             float tx = W - tw - 24.f, ty = H - 28.f;
             drawHudRect(hudProg, hudVAO, ortho, tx, ty, tw, th,
@@ -839,23 +778,18 @@ int main()
                 0.4f, 0.8f, 1.f, 1.f);
         }
 
-        // --- MENU: dark overlay + one big pulsing purple circle ---
+        // --- MENU ---
         if (state == MENU) {
             drawHudRect(hudProg, hudVAO, ortho, 0, 0, W, H, 0.0f, 0.0f, 0.05f, 0.85f);
             float pulse = 0.85f + 0.15f * sinf(now * 2.f);
-            // outer glow halo
             drawHudCircle(hudProg, circleVAO, circleCount, ortho,
                 W / 2, H / 2, 120.f * pulse, 0.3f, 0.1f, 0.7f, 0.35f);
-            // middle ring
             drawHudCircle(hudProg, circleVAO, circleCount, ortho,
                 W / 2, H / 2, 80.f, 0.5f, 0.2f, 0.9f, 0.6f);
-            // bright core
             drawHudCircle(hudProg, circleVAO, circleCount, ortho,
                 W / 2, H / 2, 45.f * pulse, 0.85f, 0.55f, 1.f, 1.f);
-            // inner highlight
             drawHudCircle(hudProg, circleVAO, circleCount, ortho,
                 W / 2 - 8, H / 2 + 8, 12.f, 1.f, 0.9f, 1.f, 0.8f);
-            // blinking "ready" pip below
             if (sinf(now * 4.f) > 0.f) {
                 drawHudRect(hudProg, hudVAO, ortho,
                     W / 2 - 80, H / 2 - 140, 160, 4,
@@ -863,18 +797,16 @@ int main()
             }
         }
 
-        // --- DEAD: red fade-in, red frame ---
+        // --- DEAD ---
         if (state == DEAD) {
             float fade = glm::clamp(deadTimer / 0.4f, 0.f, 1.f);
             drawHudRect(hudProg, hudVAO, ortho, 0, 0, W, H,
                 0.6f, 0.0f, 0.0f, 0.45f * fade);
-            // red border frame
             float bw = 12.f;
             drawHudRect(hudProg, hudVAO, ortho, 0, 0, W, bw, 1.f, 0.1f, 0.1f, fade);
             drawHudRect(hudProg, hudVAO, ortho, 0, H - bw, W, bw, 1.f, 0.1f, 0.1f, fade);
             drawHudRect(hudProg, hudVAO, ortho, 0, 0, bw, H, 1.f, 0.1f, 0.1f, fade);
             drawHudRect(hudProg, hudVAO, ortho, W - bw, 0, bw, H, 1.f, 0.1f, 0.1f, fade);
-            // respawn progress — thin bar at the bottom centre
             float prog = glm::clamp(deadTimer / 1.5f, 0.f, 1.f);
             float barW = 260.f;
             drawHudRect(hudProg, hudVAO, ortho, W / 2 - barW / 2, 60,
@@ -883,19 +815,16 @@ int main()
                 barW * prog, 6, 1.f, 0.3f, 0.2f, 1.f);
         }
 
-        // --- STAGE_CLEAR: green tint, 3 big pips showing progress ---
+        // --- STAGE_CLEAR ---
         if (state == STAGE_CLEAR) {
             float fade = glm::clamp(clearTimer / 0.3f, 0.f, 1.f);
             drawHudRect(hudProg, hudVAO, ortho, 0, 0, W, H,
                 0.0f, 0.4f, 0.1f, 0.4f * fade);
-            // three big stage pips in the centre
             for (int i = 0; i < 3; i++) {
                 float cx = W / 2 - 80 + i * 80.f;
                 float cy = H / 2;
-                // outline
                 drawHudCircle(hudProg, circleVAO, circleCount, ortho,
                     cx, cy, 36.f, 0.05f, 0.2f, 0.1f, 0.95f);
-                // fill — completed stages glow green, current stage pulses
                 if (i <= curStage) {
                     float p = (i == curStage)
                         ? (0.7f + 0.3f * sinf(now * 6.f))
@@ -904,7 +833,6 @@ int main()
                         cx, cy, 28.f, 0.3f * p, 1.f * p, 0.5f * p, 1.f);
                 }
             }
-            // auto-advance bar under the pips
             float prog = glm::clamp(clearTimer / 2.f, 0.f, 1.f);
             float barW = 300.f;
             drawHudRect(hudProg, hudVAO, ortho, W / 2 - barW / 2, H / 2 - 80,
@@ -913,12 +841,10 @@ int main()
                 barW * prog, 4, 0.3f, 1.f, 0.5f, 1.f);
         }
 
-        // --- WIN: gold tint + 12-point star burst of triangles ---
+        // --- WIN ---
         if (state == WIN) {
             drawHudRect(hudProg, hudVAO, ortho, 0, 0, W, H,
                 0.3f, 0.22f, 0.0f, 0.75f);
-            // radial burst: small rectangles rotated out from the centre.
-            // We scale each rectangle into a long thin beam and rotate it.
             const int RAYS = 12;
             float beamLen = 180.f + 20.f * sinf(now * 2.f);
             for (int i = 0; i < RAYS; i++) {
@@ -926,7 +852,6 @@ int main()
                 glm::mat4 m(1.f);
                 m = glm::translate(m, { W / 2, H / 2, 0 });
                 m = glm::rotate(m, a, { 0, 0, 1 });
-                // Draw a beam centred at origin by shifting it outward.
                 m = glm::translate(m, { 30.f, -4.f, 0.f });
                 m = glm::scale(m, { beamLen, 8.f, 1.f });
                 glUniformMatrix4fv(glGetUniformLocation(hudProg, "mvp"),
@@ -936,7 +861,6 @@ int main()
                 glBindVertexArray(hudVAO);
                 glDrawArrays(GL_TRIANGLES, 0, 6);
             }
-            // centre gold disc with pulse
             float pulse = 0.9f + 0.1f * sinf(now * 3.f);
             drawHudCircle(hudProg, circleVAO, circleCount, ortho,
                 W / 2, H / 2, 60.f * pulse,
@@ -953,7 +877,7 @@ int main()
     // --- cleanup ---
     unsigned int vaos[] = { sphereVAO, boxVAO, hudVAO, circleVAO };
     for (auto v : vaos) glDeleteVertexArrays(1, &v);
-    unsigned int texs[] = { tPlat, tMove, tSky };
+    unsigned int texs[] = { tPlat, tBall, tMove, tSky };
     for (auto t : texs) glDeleteTextures(1, &t);
     glDeleteProgram(mainProg);
     glDeleteProgram(hudProg);
